@@ -101,7 +101,7 @@ requirement of a given scenario.
 For instance, evacuation may want very high rate simulation, sacrificing
 the preciseness of simulation to some extent.
 Unfortunately, none of those challenges has been explored yet, largely
-due to a lack of multidisplinary research collaborations between physics
+due to a lack of multidisciplinary research collaborations between physics
 and computer science.
 
 This paper explores how to accelerate traffic simulation using the
@@ -120,8 +120,15 @@ program using the GPU, and provide some insight into its solution.
 \section{Assumption}
 \label{sec:assumption}
 
+grid, block, thread.
+
+A unit of functions that is launched on the GPU is called a \textit{kernel}.
+
+\section{Traffic Simulation}
+\label{sec:traffic_simulation}
+
 \begin{enumerate}
- \item Initalize the time $t$, and set the initial values of $x_n(t)$
+ \item Initialize the time $t$, and set the initial values of $x_n(t)$
        (also $y_n(t)$ and $z_n(t)$, if necessary for multidimensional
        versions).
  \item Increase the time $t$ by the sampling period $\Delta t$.
@@ -132,7 +139,7 @@ program using the GPU, and provide some insight into its solution.
  \item Exit the program.
 \end{enumerate}
 
-Note that Step 3 explots a lot of loop procedures to derive the
+Note that Step 3 exploits a lot of loop procedures to derive the
 locations and velocities of agents.
 This part can be accelerated by the GPU.
 
@@ -146,29 +153,121 @@ flow.
 The GPU code, on the other hand, spawns a bunch of worker threads to
 execute compute-intensive parts of the program in parallel, thus
 accelerating the overall program.
-What is often argued to optimize performance is how to parallelize the
-program into threads.
+What is often argued in performance optimization is how to parallelize
+the compute-intensive parts into threads.
+This is actually the well-studied problem in the literature.
+What is not really understood yet is when to offload the program on to
+the GPU.
+This paper explores two schemes that use the GPU at different timings to
+see how GPU performance is affected.
 
-In order to optimize GPU performance, however, we need to make a
-difficult decision about when to offload on to the GPU.
+\subsection{Sample-in-CPU Scheme}
+\label{sec:sample-in-cpu}
+
+We first implement such a scheme that uses the GPU \textit{only if
+necessary}.
+In other words, the program is offloaded on to the GPU, only when
+computations of locations and velocities of agents are accelerated by
+parallelization.
+The CPU bridges across sampling periods to manage simulation.
+In this scheme, the control flow of simulation is always returned to the
+CPU at the end of each sampling period.
+Such a synchronized approach makes the programmer easy to
+obtain intermediate results of simulation, whereas the overhead imposed
+on moving back and forth between the CPU and the GPU must be
+compromised.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.4\textwidth]{eps/sample-in-cpu.eps}
-\caption{Sampling by the CPU.}
+\caption{Block diagram of the Sample-in-CPU scheme.}
 \label{fig:sample-in-cpu}
 \end{figure}
+
+Figure~\ref{fig:sample-in-cpu} shows a brief overview of the
+Sample-in-CPU scheme.
+This scheme also has several alternatives depending on how many kernels
+need to be launched on the GPU in each period. 
+Suppose that we want to offload $n$ pieces of \textit{for} loops on to
+the GPU.
+We may return to the CPU $n$ times in totall, that is, return every time
+one \textit{for} loop breaks, or otherwise we may just return once when
+all the $n$ \textit{for} loops end.
+This is a design decision, and is also dependent on the GPU architecture
+and the parallelization structure.
+In general, parallelized threads need to be synchronized when moving
+across basic blocks.
+Specifically, when moving to the next \textit{for} loop executed in
+parallel, all the threads relevant to this parallel computing procedure
+must synchronize with each other.
+However, the maximum number of threads that can be synchronized on the
+GPU is often limited.
+As of 2012, for example, NVIDIA's GPU architectures limit the number of
+such threads to 1024 or less.
+Our implementation therefore forces the program to return to the CPU
+every time one \textit{for} loop breaks.
+Note that this is not a conceptual limitation of GPU computing, but is a
+current limitation of hardware.
+We believe that this limitation would be removed or mitigated in
+next-generation GPU architectures.
+
+\subsection{Sample-in-GPU Scheme}
+\label{sec:sample-in-gpu}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.4\textwidth]{eps/sample-in-gpu.eps}
-\caption{Sampling by the GPU.}
-\label{fig:sample-in-cpu}
+\caption{Block diagram of the Sample-in-GPU scheme.}
+\label{fig:sample-in-gpu}
 \end{figure}
 
+We next implement such a scheme that uses the GPU \textit{all the time},
+even to control simulation.
+There is one big kernel running on the GPU, which is launched only once
+at the beginning.
+After offloading the program on to the GPU, the CPU is going to wait for
+the completion of simulation.
+This scheme is almost optimized in performance, since there is little
+overhead in communication between the CPU and the GPU.
+The downside of this scheme is that the CPU and the GPU are not
+synchronized.
+The progress of simulation is not visible from the CPU, unless the
+program implements a specific interface to allow the CPU to access
+intermediate results of simulation running on the GPU.
+In our implementation, we consider providing a framework that the CPU
+downloads data from the GPU asynchronously without awareness of
+simulation, when the user requests intermediate results.
+This asynchronous data access may affect the performance of simulation,
+though in reality this access would not happen more than once in a
+sampling period.
+
+Figure~\ref{fig:sample-in-gpu} shows a block diagram of the
+Sample-in-GPU scheme.
+The procedure is very simple.
+The most portion of code of simulation is executed on the GPU.
+Given that the single-thread performance of recent GPUs is getting more
+reliable, this approach is pretty reasonable.
+As mentioned in Section~\ref{sec:sample-in-cpu}, however, the current
+limitation of the GPU architecture prevents us from synchronizing among
+blocks at a scale of thousands threads.
+Therefore, this scheme is speculative in a sense that it does not work today
+but may appear in the future.
+
+This paper provides some degree of insights into how this scheme is
+effective.
+We implement this scheme with the current GPU architecture under the
+assumption that global synchronization among blocks works.
+There is also another possible approach for this scheme that we limit
+the number of threads to what is supported by the GPU architecture.
+This alternative implementation, however, is left open for future work.
 
 \section{Evaluation}
 \label{sec:evaluation}
+
+We evaluate the performance of our GPU-accelerated traffic simulation
+programs, using an NVIDIA GeForce GTX 560 Ti graphics card.
+This is a middle-end graphics card integrating 394 compute cores on a
+chip.
 
 \begin{figure}[t]
 \centering
@@ -191,10 +290,17 @@ difficult decision about when to offload on to the GPU.
 \label{fig:eval_error}
 \end{figure}
 
+\subsection{Experimental Results}
+\label{sec:experimental_results}
+
+\subsection{Discussion}
+\label{sec:discussion}
+
+Imprecise Computation.
+Gdev~\cite{Kato2012}.
+
 \section{Conclusion}
 \label{sec:conclusion}
-
-Gdev~\cite{Kato2012}.
 
 \bibliographystyle{plain}
 {\footnotesize
