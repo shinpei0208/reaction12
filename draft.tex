@@ -24,7 +24,7 @@
 \title{Accelerating Traffic Simulation and Its Real-Time Challenges}
 
 \author {
-Manato Hirabayashi, Shinpei Kato, Masato Edahiro\\
+Manato Hirabayashi, Shinpei Kato and Masato Edahiro\\
 \textit{Department of Information Engineering}\\
 \textit{Nagoya University}\\
 \and
@@ -42,7 +42,21 @@ Yuki Sugiyama\\
 %\thispagestyle{empty}
 
 \begin{abstract}
-PLACEHOLDER.
+ Traffic simulation is a growing domain of computational physics.
+ There are many applications in our industry and life that benefit from
+ traffic simulation.
+ A core challenge of this research domain, however, is posed due to
+ an unbounded scale of computation.
+ In this paper, we explore an advantage of using the graphics processing
+ unit (GPU) to support its computation.
+ Two schemes are presented to study how to maximize GPU
+ performance in this context.
+ Our evaluation using a commodity graphics card shows that our GPU
+ implementation improves simulation time by about five times over the
+ original CPU implementation.
+ We also demonstrate by experiments that additional orders-of-magnitude
+ improvements could be achieved by overcoming the current hardware
+ limitation.
 \end{abstract}
 
 \section{Introduction}
@@ -136,26 +150,54 @@ We assume the Compute Unified Device Architecture (CUDA) for GPU
 programming.
 In CUDA, a unit of pieces of code that is launched on the GPU is called
 a \textit{kernel}.
-The kernel is typically composed of multiple parallelized
-\textit{threads} that accelerate computations.
-A unit of threads is called a \textit{block} where most computing
-resources are shared.
-A collection of blocks for the corresponding kernel is called a
-\textit{grid}. 
-The maximum number of threads that an individual block can contain is
-defined by the GPU architecture.
+The kernel is typically composed of multiple \textit{threads} that
+executes the code in parallel.
+A unit of threads that are co-scheduled by hardware is called a
+\textit{block}, while a collection of blocks for the corresponding
+kernel is called a \textit{grid}.  
+The maximum number of threads that can be contained by an individual
+block is defined by the GPU architecture.
 
-GPU applications use a set of the API supported by CUDA.
-We typically take the following steps to use the GPU: (i) allocate space
+CUDA programs use a set of the application programming interface (API)
+functions to control the GPU.
+We usually take the following steps to use the GPU: (i) allocate space
 to device memory, (ii) copy data to the allocated device memory space,
 (iii) launch the program on the GPU, (iv) copy resultant data back to
 host memory, and (v) free the allocated device memory space. 
 
+Our computing platform is composed of a single CPU and GPU.
+The traffic simulation program is a single process from the CPU point of
+view.
+Hence, kernels are launched from the CPU sequentially, while each kernel
+is executed by parallelized threads on the GPU.
 
 \section{Traffic Simulation}
 \label{sec:traffic_simulation}
 
-PLACEHOLDER.
+The motivation to study traffic flow is to understand the property of
+traffic flow, mainly why traffic congestion occurs.
+The study of traffic flow has a long history, and many engineering and
+physical models exist.
+This paper is particularly focused on the OV model~\cite{Bando1995}.
+In this model, a driver is supposed to maintain an optimal velocity that
+depends on the driver's headway.
+Its motion is given by Equation~\eqref{eqn:ov}.
+The optimal velocity function introduced in this equation is represented
+by the relationship between the driver's headway and velocity.
+
+The OV model has a simple form with a single parameter of sensitivity
+$a$.
+This simplicity allows us to understand the mechanisms of phenomena, and
+also predict the results of experiments.
+The disadvantage of this model, on the other hand, is a little allowance
+for control systems to turn up the parameter.
+There is indeed a need for collaborations between the research domains
+of engineering and physics.
+To begin with, however, we restrict our attention to the OV model.
+More details are found in~\cite{Bando1995}.
+
+The traffic simulation program based on the OV model is straightforward,
+as the model itself has a simple form:
 
 \begin{enumerate}
  \item Initialize the time $t$, and set the initial values of $x_n(t)$
@@ -169,9 +211,10 @@ PLACEHOLDER.
  \item Exit the program.
 \end{enumerate}
 
-Note that Step 3 exploits a lot of loop procedures to derive the
+The computation in Step 3 exploits a lot of loop procedures to derive
 locations and velocities of agents.
-This part can be accelerated by the GPU.
+This part is the most compute-intensive, and thus can be accelerated by
+the GPU.
 
 \section{GPU Implementation}
 \label{sec:gpu_implementations}
@@ -220,7 +263,7 @@ This scheme also has several alternatives depending on how many kernels
 need to be launched on the GPU in each period. 
 Suppose that we want to offload $n$ pieces of \textit{for} loops on to
 the GPU.
-We may return to the CPU $n$ times in totall, that is, return every time
+We may return to the CPU $n$ times in total, that is, return every time
 one \textit{for} loop breaks, or otherwise we may just return once when
 all the $n$ \textit{for} loops end.
 This is a design decision, and is also dependent on the GPU architecture
@@ -334,7 +377,7 @@ It is also interesting to see that the CPU implementation has a better
 performance for a small number of agents.
 Thus, the overhead of communication between the CPU and the GPU has
 non-trivial impact if the achievable parallelism is not sufficient.
-Another notable observation is that the diffence in performance of the
+Another notable observation is that the difference in performance of the
 CPU and the GPU implementations is saturated when the number of agents
 reaches 1000.
 This saturation implies the hardware potential of the NVIDIA GeForce GTX
@@ -373,7 +416,7 @@ Section~\ref{sec:sample-in-gpu}.
 
 It is very notable that the Sample-in-GPU scheme improves the simulation
 time by a factor of 1000 as compared to the original CPU implementation.
-This result encourage suport for thread synchronization among blocks in
+This result encourage support for thread synchronization among blocks in
 CUDA programming.
 There are also several interesting observations obtained in this
 experiment.
@@ -387,7 +430,7 @@ Another issue of concern often discussed in GPU programming is that
 a single-thread performance of GPUs is weak as compared to that of CPUs.
 This is true in general, but our experimental result shows that the
 performance loss caused by pushing most pieces of code into the GPU in
-the Sample-in-GPU scheme is not signficant even for a small number of
+the Sample-in-GPU scheme is not significant even for a small number of
 agents.
 This observation leads to some conclusion that the Sample-in-GPU scheme
 would be the best choice for any scale of traffic simulation.
@@ -439,15 +482,82 @@ programs.
 \subsection{Discussion}
 \label{sec:discussion}
 
-PLACEHOLDER.
+According to the experimental results, it is highly desired to use the
+Sample-in-GPU scheme, if available.
+It provides an orders-of-magnitude improvement in simulation time.
+The downside of this scheme at the moment is a lack of functionality in
+thread synchronization due to the current hardware limitation.
+Simulation results are never precise unless thread synchronization
+operates correctly.
+Although we have demonstrated that the error in simulation results
+caused by a lack of thread synchronization is acceptable in our
+experimental setup, the range of error is never bounded as depicted in
+Figure~\ref{fig:eval_error}.
+Hence, the availability of this scheme depends highly on practical
+setups.
 
-Imprecise Computation~\cite{Lin1987}.
-Gdev~\cite{Kato2012}.
+We consider that the problem of this scheme may be relevant to the
+Imprecise Computation model~\cite{Lin1987}.
+The Sample-in-CPU scheme is precise-but-slow, while the Sample-in-GPU
+scheme is imprecise-but-fast.
+If we are allowed to employ multiple GPUs in the system, we may run the
+two types of simulation programs on different GPUs concurrently.
+At some point of time $t$, the simulation result produced by the
+Sample-in-GPU scheme represents a scenario way ahead of that produced by
+the Sample-in-CPU scheme; the question is how precise it is.
+Figure~\ref{fig:eval_error} demonstrates that the error in the
+simulation result produced by the Sample-in-GPU scheme is getting larger
+as time goes by.
+If we can find such a time duration that causes the value of error to
+fall out the acceptable range for practical use, we define this time
+duration to be $\Delta t$.
+Suppose that the two simulation programs based on the Sample-in-GPU and
+the Sample-in-CPU schemes, respectively, are running concurrently.
+At every interval of time $\Delta t$, we reset the simulation result
+produced by the Sample-in-GPU scheme, and input the latest precise
+simulation result produced by the Sample-in-CPU scheme during the same
+interval.
+By this means, the value of error in the simulation result produced by
+the Sample-in-GPU scheme never falls out the acceptable range, while we
+still benefit from its simulation speed within an internal of time
+$\Delta t$.
+The value of $\Delta t$ can be determined adaptively based on the
+Imprecise Computation model.
+
+So far we have studied a single process of traffic flow.
+In reality, however, there are multiple processes of traffic flow.
+Real-time feedback from the real road conditions may also be
+additionally required to deploy traffic simulation.
+All these pieces of simulation must meet the quality-of-service (QoS)
+requirement for users.
+Now, this turns into a real-time systems problem.
+We have developed a lot of solutions to use the GPU in real-time
+systems~\cite{Kato2011_3, Kato2011_2, Kato2011_1, Kato2012}.
+We believe that some of these work could contribute to GPU-accelerated
+real-time traffic simulation.
+
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-PLACEHOLDER.
+In this paper, we have presented GPU-accelerated traffic simulation
+based on the OV model.
+The current hardware limitation of the GPU architecture caps
+improvements in performance to a factor of ten or less, as compared to
+the original CPU implementation.
+However, we demonstrated that additional orders-of-magnitude
+improvements could be achieved by removing that limitation.
+We also discussed a conceivable solution to cope with that limitation,
+using a concept of the Imprecise Computation model.
+
+In future work, we extend our scheme to multidimensional OV models.
+This extention allows our research to be applied to a broader range of
+problems beyond freeways traffic simulation.
+We also plan to consider a specific approach to the integration of the
+Imprecise Computation model into our scheme in order to facilitate
+deployment of traffic simulation in the real world.
+Another interesting direction in this line of work is to coordinate with
+engineering-based simulation such as AutoMatrix~\cite{Mangharam2011}.
 
 \bibliographystyle{plain}
 {\footnotesize
