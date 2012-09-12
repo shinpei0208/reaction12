@@ -42,6 +42,7 @@ Yuki Sugiyama\\
 %\thispagestyle{empty}
 
 \begin{abstract}
+PLACEHOLDER.
 \end{abstract}
 
 \section{Introduction}
@@ -117,15 +118,44 @@ which can be nicely offloaded on to the GPU.
 We also identify the bottleneck in accelerating our traffic simulation
 program using the GPU, and provide some insight into its solution.
 
-\section{Assumption}
+The rest of this paper is organized as follows.
+Section~\ref{sec:assumption} describes the assumption and terminology
+used this paper.
+Section~\ref{sec:traffic_simulation} briefly explains our traffic
+simulation program.
+Section~\ref{sec:gpu_implementations} presents our schemes of GPU
+implementations of traffic simulation.
+Section~\ref{sec:evaluation} evaluates the benefit of our GPU
+implementations, and provides an insight into future work.
+Section~\ref{sec:conclusion} concludes this paper.
+
+\section{Assumption and Terminology}
 \label{sec:assumption}
 
-grid, block, thread.
+We assume the Compute Unified Device Architecture (CUDA) for GPU
+programming.
+In CUDA, a unit of pieces of code that is launched on the GPU is called
+a \textit{kernel}.
+The kernel is typically composed of multiple parallelized
+\textit{threads} that accelerate computations.
+A unit of threads is called a \textit{block} where most computing
+resources are shared.
+A collection of blocks for the corresponding kernel is called a
+\textit{grid}. 
+The maximum number of threads that an individual block can contain is
+defined by the GPU architecture.
 
-A unit of functions that is launched on the GPU is called a \textit{kernel}.
+GPU applications use a set of the API supported by CUDA.
+We typically take the following steps to use the GPU: (i) allocate space
+to device memory, (ii) copy data to the allocated device memory space,
+(iii) launch the program on the GPU, (iv) copy resultant data back to
+host memory, and (v) free the allocated device memory space. 
+
 
 \section{Traffic Simulation}
 \label{sec:traffic_simulation}
+
+PLACEHOLDER.
 
 \begin{enumerate}
  \item Initialize the time $t$, and set the initial values of $x_n(t)$
@@ -203,7 +233,7 @@ must synchronize with each other.
 However, the maximum number of threads that can be synchronized on the
 GPU is often limited.
 As of 2012, for example, NVIDIA's GPU architectures limit the number of
-such threads to 1024 or less.
+such threads to 1024 or less~\cite{NVIDIA_Kepler}.
 Our implementation therefore forces the program to return to the CPU
 every time one \textit{for} loop breaks.
 Note that this is not a conceptual limitation of GPU computing, but is a
@@ -266,22 +296,103 @@ This alternative implementation, however, is left open for future work.
 
 We evaluate the performance of our GPU-accelerated traffic simulation
 programs, using an NVIDIA GeForce GTX 560 Ti graphics card.
-This is a middle-end graphics card integrating 394 compute cores on a
-chip.
+This is a middle-end graphics card based on the Fermi
+architecture~\cite{NVIDIA_Fermi}, integrating 394 compute cores on a chip.
+The programs used in this evaluation are written in CUDA, and are
+compiled by the NVIDIA CUDA Compiler (NVCC) v4.2 suite~\cite{CUDA42}.
+
+We focus on the one-dimensional OV model~\cite{Bando1995}, which can be
+applied to freeways simulation.
+The original program~\cite{OV_Program} of this simulation is written in
+C, without any parallelization.
+We use the same simulation parameters as the original default setup,
+while increasing the number of agents (cars) to see how simulation
+performance varies. 
+The evaluation is conducted by comparing our GPU implementations with
+the original CPU implementation.
+
+\subsection{Performance Benefit}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.5\textwidth]{eps/eval_accel.eps}
-\caption{Acceleration of traffic simulation.}
-\label{fig:eval_accel}
+\caption{Performance benefit of the GPU.}
+\label{fig:eval_benefit}
 \end{figure}
+
+Figure~\ref{fig:eval_benefit} demonstrates the performance benefit of
+the GPU under the current hardware limitation.
+The Sample-in-CPU scheme herein exploits synchronization between the CPU
+and the GPU after every \textit{for} loop to overcome the limitation that
+CUDA threads cannot synchronize beyond blocks.
+Despite of this restricted implementation, our GPU implementation
+outperforms the original CPU implementation by about five times in
+simulation time, when the number of agents exceeds a scale of 1000.
+This evinces an affinity of the GPU and parallel computing for traffic
+simulation.
+It is also interesting to see that the CPU implementation has a better
+performance for a small number of agents.
+Thus, the overhead of communication between the CPU and the GPU has
+non-trivial impact if the achievable parallelism is not sufficient.
+Another notable observation is that the diffence in performance of the
+CPU and the GPU implementations is saturated when the number of agents
+reaches 1000.
+This saturation implies the hardware potential of the NVIDIA GeForce GTX
+560 Ti graphics card used in this evaluation.
+Using high-end graphics cards, the difference in performance may not be
+saturated at the same scale.
+
+\subsection{Impact of Hardware Limitation}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.5\textwidth]{eps/eval_nosync.eps}
-\caption{Impact of synchronization.}
+\caption{Impact of the hardware limitation.}
 \label{fig:eval_nosync}
 \end{figure}
+
+Figure~\ref{fig:eval_nosync} demonstrates the impact of the current
+hardware limitation that CUDA threads cannot synchronize beyond blocks.
+In this experiment, we observe ``what would happen if this hardware
+limitation is removed?'', compromising the preciseness of simulation
+results.
+Namely, we use the current CUDA synchronization function to synchronize
+threads running in different blocks, even though it does not work as
+expected.
+All the GPU implementations of the plotted schemes use this assumption.
+Therefore, the Sample-in-CPU scheme is now different from what we have
+evaluated in Figure~\ref{fig:eval_benefit}, since there is no need
+anymore to return to the CPU every time one \textit{for} loop breaks.
+We instead put a synchronization function between \textit{for} loops on
+the GPU.
+The Sample-in-CPU-Sync scheme is an alternative version of the
+Sample-in-CPU scheme in that we download intermediate results from the
+GPU to the CPU at the end of each sampling period.
+The Sample-in-GPU scheme is what is presented in
+Section~\ref{sec:sample-in-gpu}.
+
+It is very notable that the Sample-in-GPU scheme improves the simulation
+time by a factor of 1000 as compared to the original CPU implementation.
+This result encourage suport for thread synchronization among blocks in
+CUDA programming.
+There are also several interesting observations obtained in this
+experiment.
+Comparing the Sample-in-CPU and the Sample-in-CPU-Sync schemes, it turns
+out that the cost of downloading intermediate results from the GPU to
+the CPU is becoming trivial as the scale of simulation increases.
+Hence, a common argument of ``host-device data communication in GPU
+programming is expensive'' does not apply to large-scale traffic
+simulation.
+Another issue of concern often discussed in GPU programming is that
+a single-thread performance of GPUs is weak as compared to that of CPUs.
+This is true in general, but our experimental result shows that the
+performance loss caused by pushing most pieces of code into the GPU in
+the Sample-in-GPU scheme is not signficant even for a small number of
+agents.
+This observation leads to some conclusion that the Sample-in-GPU scheme
+would be the best choice for any scale of traffic simulation.
+
+\subsection{Practical Concern}
 
 \begin{figure}[t]
 \centering
@@ -290,17 +401,53 @@ chip.
 \label{fig:eval_error}
 \end{figure}
 
-\subsection{Experimental Results}
-\label{sec:experimental_results}
+We finally examine the impact of misbehavior of thread synchronization
+in our GPU implementations.
+The simulation results produced by our GPU implementations are not
+precise except for those of the Sample-in-CPU scheme presented in
+Figure~\ref{fig:eval_benefit}, due to our optimistic use of thread
+synchronization on the GPU.
+We need to wait for new GPU architectures removing the limitation of
+thread synchronization in order to make them precise.
+Practically speaking, however, imprecise results of simulation are still
+valuable and meaningful as far as they are limited to an acceptable
+range of errors for traffic flow.
+
+Figure~\ref{fig:eval_error} demonstrates the error percentage of
+location and velocity between the simulation results produced by the
+original CPU and the imprecise Sample-in-GPU implementations.
+Since this is one-dimensional OV simulation, there are only forward or
+backward in location, and high or low in velocity.
+Under this constraint, the error in location is very trivial.
+This is because the characteristic of traffic flow is well captured,
+even though the simulated locations and velocities have some error in
+their individual values.
+A degree of the error in velocity is slightly high as compared to that
+in location.
+This means that velocity is more sensitive to imprecise results than
+location.
+However, the maximum error in velocity observed in our experiment is at
+most 5\%.
+Suppose that the average driving speed is 50mph.
+The simulated speed in our imprecise implementation would still be
+within a range of 47.5 to 52.5mph.
+Intuitively, this scale of error is acceptable in practice.
+We plan to further investigate if the same argument can be applied to a
+more variety of parameter setups and multidimensional OV simulation
+programs.
 
 \subsection{Discussion}
 \label{sec:discussion}
 
-Imprecise Computation.
+PLACEHOLDER.
+
+Imprecise Computation~\cite{Lin1987}.
 Gdev~\cite{Kato2012}.
 
 \section{Conclusion}
 \label{sec:conclusion}
+
+PLACEHOLDER.
 
 \bibliographystyle{plain}
 {\footnotesize
