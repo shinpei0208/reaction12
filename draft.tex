@@ -115,7 +115,7 @@ requirement of a given scenario.
 For instance, simulation of emergent evacuation may want very high-rate
 computation, even sacrificing preciseness of simulation to some extent.
 Unfortunately, none of those challenges has been explored yet, largely
-due to a lack of multidisciplinary collaborations between computationsl
+due to a lack of multidisciplinary collaborations between computational
 physics and computer science.
 
 This paper explores how to accelerate traffic simulation using the
@@ -547,7 +547,7 @@ By this means, the value of error in the simulation result produced by
 the Sample-in-GPU scheme never falls out the acceptable range, while we
 still benefit from its simulation speed within an internal of time
 $\Delta t$.
-The value of $\Delta t$ can be determined adaptively based on the
+The value of $\Delta t$ can be determined dynamically based on the
 Imprecise Computation model.
 
 So far we have studied a single process of traffic flow.
@@ -584,7 +584,7 @@ We also discussed a conceivable solution to cope with that limitation,
 using a concept of the Imprecise Computation model.
 
 In future work, we extend our scheme to multidimensional OV models.
-This extention allows our research to be applied to a broader range of
+This extension allows our research to be applied to a broader range of
 problems beyond freeways traffic simulation.
 We also plan to consider a specific approach to the integration of the
 Imprecise Computation model into our scheme in order to facilitate
