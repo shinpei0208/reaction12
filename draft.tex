@@ -24,12 +24,12 @@
 \title{Toward GPU-accelerated Traffic Simulation and Its Real-Time Challenge}
 
 \author {
-Manato Hirabayashi, Shinpei Kato and Masato Edahiro\\
+Manato Hirabayashi, Shinpei Kato, Masato Edahiro\\
 \textit{Department of Information Engineering}\\
 \textit{Nagoya University}\\
 \and
 Yuki Sugiyama\\
-\textit{Department of Physics}\\
+\textit{Department of Complex Systems Science}\\
 \textit{Nagoya University}\\
 }
 
@@ -43,49 +43,47 @@ Yuki Sugiyama\\
 
 \begin{abstract}
  Traffic simulation is a growing domain of computational physics.
- There are many applications in our industry and life that benefit from
- traffic simulation.
- A core challenge of this research domain, however, is posed due to
+ There are many applications in our life and industry that benefit
+ from traffic simulation.
+ A core challenge of this science research, however, is posed due to
  an unbounded scale of computation.
  In this paper, we explore an advantage of using the graphics processing
  unit (GPU) to support its computation.
  Two schemes are presented to study how to maximize GPU
- performance in this context.
- Our evaluation using a commodity graphics card shows that our GPU
- implementation improves simulation time by about five times over the
- original CPU implementation.
- We also demonstrate by experiments that additional orders-of-magnitude
+ performance in the context of traffic simulation.
+ Our experimental results show that even the most basic GPU
+ implementation based on our schemes accelerates simulation by about
+ five times over the original CPU implementation.
+ We also demonstrate that additional orders-of-magnitude
  improvements could be achieved by overcoming the current hardware
  limitation.
 \end{abstract}
 
 \section{Introduction}
 
-Transportation systems underlie our industry and life as part of
+Transportation systems underlie our life and industry, as part of
 societal infrastructure.
-Economy depends highly on traffic flow.
-Once a traffic jam occurs, for example, it could cause significant
-economic damage through degradation of transport efficiency, energy
-consumption, and environmental poisoning.
-According to the Japanese government report a few years ago, economic
-losses due to traffic congestion reach one hundred billion dollars per
-year in Japan.
+Traffic flow is particularly a major factor that influences economy.
+According to the Japanese government report, economic losses due to
+traffic congestion could reach one hundred billion dollars per year in
+Japan, through degradation of transport efficiency, energy consumption,
+and environmental poisoning.
 Albeit a major issue of transportation systems, the mechanism of traffic
-jam is not well-explained in the literature.
+congestion is not well-explained in the literature.
 What is particularly important is ``phantom jam'', which often happens
 on freeways without any accident.
 This phantom jam should be avoided by science, given that it is
 a physical phenomenon but not one caused by human errors.
-However, we are not aware of scientific and engineering solutions to
-such real-world problems.
+However, we have not been aware of scientific and engineering solutions
+to such real-world problems yet.
 
 In physics, traffic flow is described by mathematical
-models~\cite{Bando1995, Kerner1993, Nagel1992}.
-While their mathematical expressions are not identical, they are all
-compute-intensive procedures.
+models~\cite{Bando1995, Bando1995_2, Kerner1993, Nagel1992}.
+While their mathematical expressions are not identical, they are
+commonly compute-intensive forms.
 For example, traffic simulation based on the Optimal Velocity (OV)
-model~\cite{Bando1995} computes locations and velocities of agents every
-sampling period, solving OV equations. 
+model~\cite{Bando1995, Bando1995_2} computes locations and velocities of
+agents every sampling period, solving OV equations. 
 Specifically, the location $x_n$ of the $n$th agent is described by the
 following equation, where $\Delta x_n = x_{n+1} - x_n$ is a distance to
 a preceding agent, $a$ is a sensitivity, and $V()$ is an optimal
@@ -107,17 +105,18 @@ animals, to use similar optimal velocity models.
 Given a scale of million agents in the real world, traffic
 simulation should be supported by powerful computer systems.
 
-Deployment of traffic simulation may require real-time feedback from the
-real world.
-This turns out to be a cyber-physical systems (CPS) problem.
+Computational workload is not the only issue of concern.
+Deployment of traffic simulation may also require real-time feedback
+from the real world, which turns out to be a cyber-physical systems
+(CPS) problem indeed.
 Real-time traffic simulation is another challenging issue, where
 the rate and the preciseness of simulation must be traded to meet the
 requirement of a given scenario.
-For instance, evacuation may want very high rate simulation, sacrificing
-the preciseness of simulation to some extent.
+For instance, simulation of emergent evacuation may want very high-rate
+computation, even sacrificing preciseness of simulation to some extent.
 Unfortunately, none of those challenges has been explored yet, largely
-due to a lack of multidisciplinary research collaborations between physics
-and computer science.
+due to a lack of multidisciplinary collaborations between computationsl
+physics and computer science.
 
 This paper explores how to accelerate traffic simulation using the
 state-of-the-art parallel computing technology.
@@ -133,14 +132,14 @@ We also identify the bottleneck in accelerating our traffic simulation
 program using the GPU, and provide some insight into its solution.
 
 The rest of this paper is organized as follows.
-Section~\ref{sec:assumption} describes the assumption and terminology
-used this paper.
-Section~\ref{sec:traffic_simulation} briefly explains our traffic
-simulation program.
+Section~\ref{sec:assumption} describes the basic assumption and
+terminology used in this paper.
+Section~\ref{sec:traffic_simulation} explains an overview of
+traffic simulation and its literature.
 Section~\ref{sec:gpu_implementations} presents our schemes of GPU
-implementations of traffic simulation.
-Section~\ref{sec:evaluation} evaluates the benefit of our GPU
-implementations, and provides an insight into future work.
+implementations for traffic simulation.
+Section~\ref{sec:evaluation} evaluates the advantage of using our
+schemes, and provides an insight into future work.
 Section~\ref{sec:conclusion} concludes this paper.
 
 \section{Assumption and Terminology}
@@ -171,6 +170,19 @@ view.
 Hence, kernels are launched from the CPU sequentially, while each kernel
 is executed by parallelized threads on the GPU.
 
+While we are intensively interested in CUDA and GPUs, the notion of
+accelerating traffic simulation presented in this paper is widely
+applicable to heterogeneous architectures, where CPUs and 
+accelerators co-exist to complement each other. 
+GPUs are currently the most well-recognized forms of accelerators, but
+emerging alternatives include the Intel Many Integrated Core (MIC) and
+AMD Fusion architectures.
+However, their programming models are almost identical in that a master
+thread running on the CPU manages the program flow, while parallelized
+threads are offloaded on to accelerators to boost computing performance.
+CUDA, OpenCL, HMPP, and AMP are all such programming languages that
+support heterogeneous architectures under this concept.
+
 \section{Traffic Simulation}
 \label{sec:traffic_simulation}
 
@@ -178,7 +190,8 @@ The motivation to study traffic flow is to understand the property of
 traffic flow, mainly why traffic congestion occurs.
 The study of traffic flow has a long history, and many engineering and
 physical models exist.
-This paper is particularly focused on the OV model~\cite{Bando1995}.
+This paper is particularly focused on the OV model~\cite{Bando1995,
+Bando1995_2}.
 In this model, a driver is supposed to maintain an optimal velocity that
 depends on the driver's headway.
 Its motion is given by Equation~\eqref{eqn:ov}.
@@ -194,10 +207,11 @@ for control systems to turn up the parameter.
 There is indeed a need for collaborations between the research domains
 of engineering and physics.
 To begin with, however, we restrict our attention to the OV model.
-More details are found in~\cite{Bando1995}.
+More details are found in~\cite{Bando1995, Bando1995_2}.
 
 The traffic simulation program based on the OV model is straightforward,
-as the model itself has a simple form:
+as the model itself has a simple form.
+In this paper, we abstract its algorithm by the following stages:
 
 \begin{enumerate}
  \item Initialize the time $t$, and set the initial values of $x_n(t)$
@@ -211,15 +225,27 @@ as the model itself has a simple form:
  \item Exit the program.
 \end{enumerate}
 
-The computation in Step 3 exploits a lot of loop procedures to derive
-locations and velocities of agents.
-This part is the most compute-intensive, and thus can be accelerated by
-the GPU.
+The computational workload in Step 3 exploits a lot of loop executions
+to derive locations and velocities of agents.
+This is the most compute-intensive part of the algorithm.
+The primary goal of this paper is to find out the parallelism of this
+workload that can be applied to the GPU.
+By nature, traffic simulation based on the OV model is very scalable in
+terms of performance with respect to the number of agents.
+The location and velocity of each agent depends on only those of
+neighbors.
+It is worth exploring a breakthrough of this research domain by
+coordinating computational physics and computer science technology.
 
 \section{GPU Implementation}
 \label{sec:gpu_implementations}
 
-GPU performance is dominated by the program design.
+The primary contribution of this paper is to identify the fundamental
+schemes of GPU implementations for traffic simulation.
+It is very important to understand that GPU performance is dominated by
+the program design.
+We first reason about the motivation of our schemes.
+
 GPU-accelerated programs are typically divided into two pieces of code.
 The CPU code plays a role of a master thread that controls the program
 flow.
@@ -344,8 +370,8 @@ architecture~\cite{NVIDIA_Fermi}, integrating 394 compute cores on a chip.
 The programs used in this evaluation are written in CUDA, and are
 compiled by the NVIDIA CUDA Compiler (NVCC) v4.2 suite~\cite{CUDA42}.
 
-We focus on the one-dimensional OV model~\cite{Bando1995}, which can be
-applied to freeways simulation.
+We focus on the one-dimensional OV model~\cite{Bando1995, Bando1995_2},
+which can be applied to freeways simulation.
 The original program~\cite{OV_Program} of this simulation is written in
 C, without any parallelization.
 We use the same simulation parameters as the original default setup,
@@ -530,11 +556,18 @@ Real-time feedback from the real road conditions may also be
 additionally required to deploy traffic simulation.
 All these pieces of simulation must meet the quality-of-service (QoS)
 requirement for users.
-Now, this turns into a real-time systems problem.
-We have developed a lot of solutions to use the GPU in real-time
+Imagine how many potential users exist in the real-world transportation
+system.
+We are facing a core challenge of next-generation real-time systems.
+
+We have developed basic solutions to use the GPU in real-time
 systems~\cite{Kato2011_3, Kato2011_2, Kato2011_1, Kato2012}.
-We believe that some of these work could contribute to GPU-accelerated
-real-time traffic simulation.
+Resource management with scheduling, synchronization, and memory
+management of GPU applications has been addressed in our previous
+work.
+We believe that a grander vision of GPU-accelerated traffic
+simulation will need an integration of cutting-edge real-time systems
+technology and computational physics.
 
 
 \section{Conclusion}
